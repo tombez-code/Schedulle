@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Škola FLOW — Timetable Editor 2026/27</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 0; background: #f8f9fb; color: #222; }
+.app { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 16px; min-height: 100vh; }
+.main { overflow: auto; }
+.sidebar { position: sticky; top: 16px; align-self: start; background: #fff; border: 1px solid #e2e5eb; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04); max-height: calc(100vh - 32px); overflow-y: auto; }
+h1 { font-size: 22pt; margin: 0 0 4px; }
+h2 { font-size: 14pt; margin: 22px 0 8px; color: #333; }
+h3 { font-size: 11pt; margin: 0 0 8px; color: #555; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.subtitle { color: #666; margin: 0 0 12px; font-size: 10pt; }
+.draft { background: #eef4ff; border-left: 3px solid #4a90e2; padding: 8px 12px; border-radius: 4px; font-size: 10pt; color: #234; margin-bottom: 16px; }
+table { border-collapse: collapse; width: 100%; margin: 4pt 0 10pt; font-size: 9.5pt; background: #fff; }
+th, td { border: 1px solid #d7dbe3; padding: 5px 6px; vertical-align: top; }
+th { background: #eef1f5; font-weight: 600; text-align: left; }
+td.day { font-weight: 600; background: #f5f7fa; width: 90px; }
+td.cell { cursor: pointer; min-height: 40px; position: relative; transition: background .1s; }
+td.cell:hover { background: #fff9d6; }
+td.cell.shared { background: #fff2b3; }
+td.cell.shared:hover { background: #ffe98a; }
+td.cell.empty { color: #aaa; font-style: italic; }
+.subj { font-weight: 700; display: block; }
+.teachers { display: block; color: #444; font-size: 9pt; margin-top: 2px; }
+.kpi { margin-bottom: 18px; padding: 12px; background: #f5f7fa; border-radius: 8px; }
+.kpi-big { font-size: 26pt; font-weight: 700; line-height: 1.1; color: #2a5db2; }
+.kpi-label { font-size: 9pt; color: #666; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.03em; }
+.kpi-sub { font-size: 9pt; color: #777; margin-top: 4px; }
+.util-table { width: 100%; font-size: 9pt; }
+.util-table td { padding: 3px 4px; border: none; border-bottom: 1px solid #ebedf0; }
+.util-bar { height: 6px; background: #e3e6ec; border-radius: 3px; overflow: hidden; margin-top: 2px; }
+.util-bar-fill { height: 100%; background: #4a90e2; transition: width .3s; }
+.util-bar-fill.over { background: #d9534f; }
+.util-bar-fill.full { background: #2a7f2a; }
+.util-bar-fill.low { background: #ffc107; }
+.legend { display: flex; gap: 10px; align-items: center; font-size: 9pt; color: #555; margin: 4px 0 14px; }
+.legend span { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.legend .l-shared { background: #fff2b3; }
+.toolbar { display: flex; gap: 8px; margin: 8px 0 16px; }
+.btn { padding: 6px 12px; font-size: 10pt; border: 1px solid #d0d4db; background: #fff; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: #f0f2f6; }
+.btn-primary { background: #4a90e2; color: #fff; border-color: #3a7bc8; }
+.btn-primary:hover { background: #3a7bc8; }
+dialog { border: none; border-radius: 10px; padding: 0; box-shadow: 0 10px 40px rgba(0,0,0,.25); max-width: 420px; width: 90%; }
+dialog::backdrop { background: rgba(0,0,0,.3); }
+.modal { padding: 18px; }
+.modal h3 { margin-top: 0; color: #222; text-transform: none; letter-spacing: normal; font-size: 13pt; }
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 9pt; color: #555; margin-bottom: 4px; }
+.field input, .field select { width: 100%; padding: 6px 8px; font-size: 10pt; border: 1px solid #d0d4db; border-radius: 4px; }
+.teachers-edit { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.chip { background: #e9eef5; color: #234; padding: 3px 8px; border-radius: 12px; font-size: 9pt; display: inline-flex; align-items: center; gap: 4px; }
+.chip .x { cursor: pointer; color: #999; font-weight: bold; }
+.chip .x:hover { color: #d9534f; }
+.footer-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.checkbox { display: flex; align-items: center; gap: 6px; font-size: 10pt; color: #444; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="main">
+    <h1>Škola FLOW</h1>
+    <div class="subtitle">Timetable &amp; Team Overview — Editor (2026/27)</div>
+    <div class="draft">First draft — click any block to edit. KPIs on the right update live.</div>
+
+    <div class="legend">
+      <div><span class="l-shared"></span>shared block (G4/5 + G7)</div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" id="resetBtn">Reset to initial</button>
+      <button class="btn" id="exportBtn">Export JSON</button>
+      <button class="btn btn-primary" id="exportHtmlBtn">Export HTML</button>
+    </div>
+
+    <div id="timetables"></div>
+  </div>
+
+  <div class="sidebar">
+    <h3>Key KPIs</h3>
+
+    <div class="kpi">
+      <div class="kpi-big" id="kpiClubHours">–</div>
+      <div class="kpi-label">Free hours / week for clubs</div>
+      <div class="kpi-sub" id="kpiClubSub"></div>
+    </div>
+
+    <div class="kpi">
+      <div class="kpi-big" id="kpiCoTeaching">–</div>
+      <div class="kpi-label">Co-teaching coverage</div>
+      <div class="kpi-sub" id="kpiCoSub"></div>
+    </div>
+
+    <div class="kpi">
+      <div class="kpi-big" id="kpiUtil">–</div>
+      <div class="kpi-label">Overall teacher utilization</div>
+      <div class="kpi-sub" id="kpiUtilSub"></div>
+    </div>
+
+    <h3>Per Staff</h3>
+    <table class="util-table" id="utilTable"></table>
+
+    <h3 style="margin-top:18px;">Per Class</h3>
+    <table class="util-table" id="classTable"></table>
+  </div>
+</div>
+
+<dialog id="editDlg">
+  <div class="modal">
+    <h3 id="dlgTitle">Edit block</h3>
+    <div class="field">
+      <label>Subject</label>
+      <input id="fSubject" type="text">
+    </div>
+    <div class="field">
+      <label>Teachers</label>
+      <div class="teachers-edit" id="fTeachers"></div>
+      <select id="fTeacherAdd">
+        <option value="">— add a staff member —</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Free-form note (e.g. "(CLIL: Nature)", "(groups rotate)")</label>
+      <input id="fNote" type="text">
+    </div>
+    <div class="field">
+      <label class="checkbox"><input type="checkbox" id="fShared"> Shared block (G4/5 + G7)</label>
+    </div>
+    <div class="footer-actions">
+      <button class="btn" id="dlgClear">Clear block</button>
+      <div>
+        <button class="btn" id="dlgCancel">Cancel</button>
+        <button class="btn btn-primary" id="dlgSave">Save</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<script>
+// ============== Data Model ==============
+
+const CLASSES = ["G1", "G2", "G3", "G4/5", "G7"];
+const CLASS_MAX_BLOCKS = { "G1": 11, "G2": 11, "G3": 13, "G4/5": 13, "G7": 15 };
+const CLASS_LABELS = {
+  "G1": "G1 · Vendula Minovská",
+  "G2": "G2 · TBD (Class teacher)",
+  "G3": "G3 · Zofie Zemanová",
+  "G4/5": "G4/5 (combined) · Jan Sova",
+  "G7": "G7 · Filip Brunclík",
+};
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+const BLOCKS = ["Block 1 (8:30–10:00)", "Block 2 (10:30–12:00)", "Block 3 (13:00–14:30)"];
+
+// Staff roster: maxHours per week
+const STAFF = {
+  "Minovská":        { max: 22, role: "Class teacher G1" },
+  "TBD(G2)":         { max: 22, role: "Class teacher G2" },
+  "Zemanová":        { max: 22, role: "Class teacher G3" },
+  "Sova":            { max: 22, role: "Class teacher G4/5" },
+  "Brunclík":        { max: 22, role: "PE (all classes) + G7 class teacher" },
+  "NS1":             { max: 32, role: "Native Speaker (G1+G2)" },
+  "NS2":             { max: 32, role: "Native Speaker (G3+G4/5)" },
+  "NS3":             { max: 22, role: "Native Speaker (G7, 70%)" },
+  "Stella":          { max: 32, role: "SENCO" },
+  "TA1":             { max: 32, role: "Teaching Assistant" },
+  "TA2":             { max: 32, role: "Teaching Assistant" },
+  "Kašparová":       { max: 0, role: "External — Mathematics (G7)" },
+  "Hodonský":        { max: 0, role: "External — Czech (G7)" },
+  "Science (ext.)":  { max: 0, role: "External — Physics/Chem/Bio (G7)" },
+  "Humanities (ext.)": { max: 0, role: "External — History/Geo/Civics (G7)" },
+  "Kiddum":          { max: 0, role: "External — ICT (all classes)" },
+  "Arts teacher":    { max: 0, role: "External — Art + Music (G7+G4/5)" },
+};
+
+const BLOCK_HOURS = 2; // each 90-min block counts as 2 RVP hours
+
+// initial timetables — each block is { subject, teachers, note, shared }
+// Using helper B(subject, teachers, note, shared)
+const B = (subject, teachers, note="", shared=false) => ({ subject, teachers, note, shared });
+const EMPTY = () => ({ subject: "", teachers: [], note: "", shared: false });
+
+const INITIAL = {
+  "G1": [
+    // Monday B1, B2, B3
+    [ B("Czech Lang.", ["Minovská","TA1"]), B("Maths", ["Minovská","Stella"]), B("PE", ["Brunclík"]) ],
+    // Tuesday
+    [ B("Czech Lang.", ["Minovská","TA2"]), B("Maths", ["Minovská","Stella"]), B("Nature Studies", ["Minovská","Stella"]) ],
+    // Wednesday
+    [ B("Czech Lang.", ["Minovská","TA1"]), B("English", ["NS1","Minovská"], "(CLIL: Nature)"), B("Arts", ["Minovská","TA2"]) ],
+    // Thursday
+    [ B("Maths", ["Minovská","Stella"]), B("Czech Lang.", ["Minovská","TA1"]), B("Life Skills", ["Minovská","TA2"]) ],
+    // Friday
+    [ B("Czech Lang.", ["Minovská","Stella"]), B("English", ["NS1","Minovská"]), B("ICT", ["Kiddum","Minovská"]) ],
+  ],
+  "G2": [
+    [ B("Czech Lang.", ["TBD(G2)","TA2"]), B("Maths", ["TBD(G2)","Stella"]), B("Arts", ["TBD(G2)","TA1"]) ],
+    [ B("Czech Lang.", ["TBD(G2)","TA1"]), B("Maths", ["TBD(G2)","Stella"]), B("Nature Studies", ["TBD(G2)","Stella"]) ],
+    [ B("Czech Lang.", ["TBD(G2)","TA2"]), B("English", ["NS1","TBD(G2)"], "(CLIL: Nature)"), B("PE", ["Brunclík"]) ],
+    [ B("Maths", ["TBD(G2)","Stella"]), B("Czech Lang.", ["TBD(G2)","TA2"]), B("Life Skills", ["TBD(G2)","TA1"]) ],
+    [ B("Czech Lang.", ["TBD(G2)","Stella"]), B("English", ["NS1","TBD(G2)"]), B("ICT", ["Kiddum","TBD(G2)"]) ],
+  ],
+  "G3": [
+    [ B("Czech Lang.", ["Zemanová","TA1"]), B("Maths", ["Zemanová","Stella"]), B("Life Skills", ["Zemanová","TA1"]) ],
+    [ B("Czech Lang.", ["Zemanová","TA2"]), B("Maths", ["Zemanová","Stella"]), B("Science", ["Zemanová","Stella"]) ],
+    [ B("Czech Lang.", ["Zemanová","TA1"]), B("English", ["NS2","Zemanová"], "(CLIL: Science)"), B("Arts", ["Zemanová","NS2"], "(CLIL)") ],
+    [ B("Maths", ["Zemanová","Stella"]), B("English", ["NS2","Zemanová"]), B("PE", ["Brunclík"]) ],
+    [ B("Czech Lang.", ["Zemanová","Stella"]), B("Maths", ["Zemanová","TA2"]), B("ICT", ["Kiddum","Zemanová"]) ],
+  ],
+  "G4/5": [
+    [ B("Czech Lang.", ["Sova","TA1"], "(Yr4: grammar / Yr5: writing)"), B("Maths", ["Sova","Stella"], "(groups rotate)"), B("Science", ["Sova","Stella"]) ],
+    [ B("Czech Lang.", ["Sova","TA2"]), B("Maths", ["Sova","Stella"]), B("PE", ["Brunclík"], "(shared G4/5+G7)", true) ],
+    [ B("Czech Lang.", ["Sova","TA1"]), B("English", ["NS2","Sova"], "(CLIL: Science)"), B("ICT", ["Kiddum","Sova"]) ],
+    [ B("Maths", ["Sova","Stella"], "(groups rotate)"), B("English", ["NS2","Sova"]), B("Project", ["Sova","Stella"]) ],
+    [ B("Life Skills", ["Sova","TA1"]), B("Maths", ["Sova","TA2"]), B("Arts", ["Arts teacher"], "(shared G4/5+G7)", true) ],
+  ],
+  "G7": [
+    [ B("Maths", ["Kašparová"]), B("Czech Lang.", ["Hodonský"]), B("English", ["NS3"]) ],
+    [ B("Life Skills", ["Brunclík"]), B("English", ["NS3"]), B("PE", ["Brunclík"], "(shared G4/5+G7)", true) ],
+    [ B("Science", ["Science (ext.)"]), B("Science", ["Science (ext.)"]), B("ICT", ["Kiddum"]) ],
+    [ B("Humanities", ["Humanities (ext.)"]), B("Humanities", ["Humanities (ext.)"]), B("English", ["NS3"], "(CLIL)") ],
+    [ B("Maths", ["Kašparová"]), B("Czech Lang.", ["Hodonský"]), B("Arts", ["Arts teacher"], "(shared G4/5+G7)", true) ],
+  ],
+};
+
+let state = structuredClone(INITIAL);
+
+// ============== Rendering ==============
+
+const timetablesDiv = document.getElementById("timetables");
+
+function render() {
+  renderTimetables();
+  renderKPIs();
+}
+
+function renderTimetables() {
+  let html = "";
+  for (const cls of CLASSES) {
+    html += `<h2>${CLASS_LABELS[cls]}</h2>`;
+    html += "<table>";
+    html += "<tr><th>Day</th>";
+    for (const b of BLOCKS) html += `<th>${b}</th>`;
+    html += "</tr>";
+    const rows = state[cls];
+    for (let d = 0; d < DAYS.length; d++) {
+      html += `<tr><td class="day">${DAYS[d]}</td>`;
+      for (let b = 0; b < 3; b++) {
+        const cell = rows[d][b];
+        const shared = cell.shared ? " shared" : "";
+        const empty = !cell.subject && cell.teachers.length === 0 ? " empty" : "";
+        const label = cell.subject ? `<span class="subj">${cell.subject}</span>` : `<span class="subj">—</span>`;
+        const teachers = cell.teachers.length ? `<span class="teachers">${cell.teachers.join(" + ")}${cell.note ? " " + cell.note : ""}</span>` : "";
+        html += `<td class="cell${shared}${empty}" data-cls="${cls}" data-d="${d}" data-b="${b}">${label}${teachers}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</table>";
+  }
+  timetablesDiv.innerHTML = html;
+  // attach listeners
+  for (const td of timetablesDiv.querySelectorAll("td.cell")) {
+    td.addEventListener("click", () => openEdit(td.dataset.cls, +td.dataset.d, +td.dataset.b));
+  }
+}
+
+// ============== KPIs ==============
+
+function computeStats() {
+  // teaching hours per staff + total block count
+  const teaching = {};
+  for (const name of Object.keys(STAFF)) teaching[name] = 0;
+
+  let totalBlocks = 0;
+  let filledBlocks = 0;
+  let coTeachingBlocks = 0;
+  const sharedBlocksSeen = new Set(); // to count shared blocks only once per pair
+
+  const classStats = {};
+  for (const cls of CLASSES) classStats[cls] = { filled: 0, max: CLASS_MAX_BLOCKS[cls] };
+
+  for (const cls of CLASSES) {
+    const rows = state[cls];
+    for (let d = 0; d < DAYS.length; d++) {
+      for (let b = 0; b < 3; b++) {
+        const cell = rows[d][b];
+        totalBlocks++;
+        if (cell.subject || cell.teachers.length > 0) {
+          filledBlocks++;
+          classStats[cls].filled++;
+          if (cell.teachers.length >= 2) coTeachingBlocks++;
+          // For teacher hours: shared block should only count ONCE for the teacher (not twice)
+          const sharedKey = cell.shared ? `${d}-${b}-${cell.subject}` : null;
+          const countOnce = !sharedKey || !sharedBlocksSeen.has(sharedKey);
+          if (sharedKey) sharedBlocksSeen.add(sharedKey);
+          if (countOnce) {
+            for (const t of cell.teachers) {
+              if (teaching[t] === undefined) teaching[t] = 0;
+              teaching[t] += BLOCK_HOURS;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Free hours per internal staff (max > 0)
+  const freeHours = {};
+  let totalFree = 0;
+  let totalMax = 0;
+  let totalTeaching = 0;
+  for (const [name, info] of Object.entries(STAFF)) {
+    if (info.max > 0) {
+      const th = teaching[name] || 0;
+      freeHours[name] = Math.max(0, info.max - th);
+      totalFree += freeHours[name];
+      totalMax += info.max;
+      totalTeaching += Math.min(th, info.max);
+    }
+  }
+
+  return {
+    teaching,
+    freeHours,
+    totalFree,
+    totalMax,
+    totalTeaching,
+    totalBlocks,
+    filledBlocks,
+    coTeachingBlocks,
+    coTeachingPct: filledBlocks ? (coTeachingBlocks / filledBlocks * 100) : 0,
+    utilPct: totalMax ? (totalTeaching / totalMax * 100) : 0,
+    classStats,
+  };
+}
+
+function renderKPIs() {
+  const s = computeStats();
+  document.getElementById("kpiClubHours").textContent = Math.round(s.totalFree) + " h";
+  document.getElementById("kpiClubSub").textContent = "≈ " + Math.round(s.totalFree / 1.5) + " clubs of 1.5 h, or " + Math.round(s.totalFree / 2) + " × 2 h";
+
+  document.getElementById("kpiCoTeaching").textContent = s.coTeachingPct.toFixed(0) + " %";
+  document.getElementById("kpiCoSub").textContent = `${s.coTeachingBlocks} / ${s.filledBlocks} blocks have 2+ adults`;
+
+  document.getElementById("kpiUtil").textContent = s.utilPct.toFixed(0) + " %";
+  document.getElementById("kpiUtilSub").textContent = `${Math.round(s.totalTeaching)} h teaching / ${s.totalMax} h contracted`;
+
+  // Per-staff table
+  let html = "<tr><th>Staff</th><th style='text-align:right'>Teach</th><th style='text-align:right'>Free</th></tr>";
+  for (const [name, info] of Object.entries(STAFF)) {
+    if (info.max === 0) continue;
+    const th = s.teaching[name] || 0;
+    const pct = Math.min(100, (th / info.max * 100));
+    const cls = pct >= 100 ? "full" : (pct >= 85 ? "" : (pct >= 50 ? "" : "low"));
+    html += `<tr><td>${name}</td><td style="text-align:right">${th} h</td><td style="text-align:right"><b>${Math.max(0, info.max - th)} h</b></td></tr>`;
+    html += `<tr><td colspan="3" style="padding:0 4px 4px"><div class="util-bar"><div class="util-bar-fill ${cls}" style="width:${pct}%"></div></div></td></tr>`;
+  }
+  document.getElementById("utilTable").innerHTML = html;
+
+  // Per-class table
+  let html2 = "<tr><th>Class</th><th style='text-align:right'>Filled</th><th style='text-align:right'>Max</th></tr>";
+  for (const cls of CLASSES) {
+    const { filled, max } = s.classStats[cls];
+    const pct = max ? (filled / max * 100) : 0;
+    const status = filled > max ? "over" : (filled === max ? "full" : "");
+    html2 += `<tr><td>${cls}</td><td style="text-align:right">${filled}</td><td style="text-align:right">${max}</td></tr>`;
+    html2 += `<tr><td colspan="3" style="padding:0 4px 4px"><div class="util-bar"><div class="util-bar-fill ${status}" style="width:${Math.min(100, pct)}%"></div></div></td></tr>`;
+  }
+  document.getElementById("classTable").innerHTML = html2;
+}
+
+// ============== Edit Modal ==============
+
+const dlg = document.getElementById("editDlg");
+let editCtx = null;
+
+function openEdit(cls, d, b) {
+  const cell = state[cls][d][b];
+  editCtx = { cls, d, b };
+  document.getElementById("dlgTitle").textContent = `${cls} · ${DAYS[d]} · Block ${b+1}`;
+  document.getElementById("fSubject").value = cell.subject || "";
+  document.getElementById("fNote").value = cell.note || "";
+  document.getElementById("fShared").checked = !!cell.shared;
+  renderTeacherChips(cell.teachers.slice());
+  // populate add-dropdown with staff not already selected
+  const sel = document.getElementById("fTeacherAdd");
+  sel.innerHTML = '<option value="">— add a staff member —</option>';
+  for (const [name, info] of Object.entries(STAFF)) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = `${name} (${info.role})`;
+    sel.appendChild(opt);
+  }
+  dlg.showModal();
+}
+
+function renderTeacherChips(list) {
+  const box = document.getElementById("fTeachers");
+  box.innerHTML = "";
+  box.dataset.value = JSON.stringify(list);
+  for (const name of list) {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.innerHTML = `${name} <span class="x">×</span>`;
+    chip.querySelector(".x").addEventListener("click", () => {
+      const current = JSON.parse(box.dataset.value);
+      renderTeacherChips(current.filter(t => t !== name));
+    });
+    box.appendChild(chip);
+  }
+}
+
+document.getElementById("fTeacherAdd").addEventListener("change", (e) => {
+  const name = e.target.value;
+  if (!name) return;
+  const current = JSON.parse(document.getElementById("fTeachers").dataset.value);
+  if (!current.includes(name)) {
+    current.push(name);
+    renderTeacherChips(current);
+  }
+  e.target.value = "";
+});
+
+document.getElementById("dlgSave").addEventListener("click", () => {
+  if (!editCtx) return;
+  const { cls, d, b } = editCtx;
+  const teachers = JSON.parse(document.getElementById("fTeachers").dataset.value);
+  state[cls][d][b] = {
+    subject: document.getElementById("fSubject").value.trim(),
+    teachers,
+    note: document.getElementById("fNote").value.trim(),
+    shared: document.getElementById("fShared").checked,
+  };
+  dlg.close();
+  render();
+});
+
+document.getElementById("dlgCancel").addEventListener("click", () => dlg.close());
+
+document.getElementById("dlgClear").addEventListener("click", () => {
+  if (!editCtx) return;
+  const { cls, d, b } = editCtx;
+  state[cls][d][b] = EMPTY();
+  dlg.close();
+  render();
+});
+
+// ============== Toolbar actions ==============
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Reset to initial timetable? All edits will be lost.")) {
+    state = structuredClone(INITIAL);
+    render();
+  }
+});
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "timetable.json";
+  a.click();
+});
+
+document.getElementById("exportHtmlBtn").addEventListener("click", () => {
+  // Generate a static HTML view of the current state (like the main doc)
+  let out = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Škola FLOW — Timetable 2026/27</title>
+<style>
+body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; }
+h1 { font-size: 20pt; } h2 { font-size: 16pt; margin-top: 18pt; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #888; padding: 4pt 6pt; vertical-align: top; font-size: 10pt; }
+th { background: #f0f0f0; font-weight: bold; text-align: left; }
+.shared { background: #fff2b3; }
+</style></head><body>
+<h1>Škola FLOW</h1><h2>Timetable 2026/27</h2>`;
+  for (const cls of CLASSES) {
+    out += `<h2>${CLASS_LABELS[cls]}</h2><table>`;
+    out += `<tr><th>Day</th><th>${BLOCKS[0]}</th><th>${BLOCKS[1]}</th><th>${BLOCKS[2]}</th></tr>`;
+    for (let d = 0; d < DAYS.length; d++) {
+      out += `<tr><td><b>${DAYS[d]}</b></td>`;
+      for (let b = 0; b < 3; b++) {
+        const c = state[cls][d][b];
+        const sh = c.shared ? ' class="shared"' : "";
+        if (!c.subject && !c.teachers.length) { out += `<td${sh}></td>`; continue; }
+        out += `<td${sh}><b>${c.subject}</b><br>${c.teachers.join(" + ")}${c.note ? " " + c.note : ""}</td>`;
+      }
+      out += "</tr>";
+    }
+    out += "</table>";
+  }
+  out += "</body></html>";
+  const blob = new Blob([out], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "Timetable_EN_edited.html";
+  a.click();
+});
+
+render();
+</script>
+</body>
+</html>
